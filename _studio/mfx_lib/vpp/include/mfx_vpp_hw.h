@@ -961,6 +961,11 @@ namespace MfxHwVideoProcessing
         mfxU32        m_frame_num;
         mfxStatus     m_critical_error;
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        mfxStatus UpdateHVSExecuteParams();
+        mfxStatus InitHVSNoiseReductionVPPInternalParam();
+        mfxStatus FreeHVSNoiseReductionVPPInternalParam();
+#endif
         // Not an auto_ptr anymore since core owns create/delete semantic now.
         VPPHWResMng * m_ddi;
         bool          m_bMultiView;
@@ -1004,6 +1009,19 @@ namespace MfxHwVideoProcessing
 
         public:
             void SetCmDevice(CmDevice * device) { m_pCmDevice = device; }
+
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+            static mfxStatus UpdateEncodeInfo(mfxHDL pthis, mfxHVSNoiseReductionFrameParam* par); // Callback funtion
+            struct VppEncodeFrameInfoInternal
+            {
+                mfxI16 EncodeQuality[4]; // QP for Iframe, Pframe, Bframe and Bref_Frame
+                mfxI16 CodecID; // HEVC, H264 ...
+                mfxI16 Profile; // mapping mode provided by user
+                bool isUpdated;
+                UMC::Mutex   m_mtx;
+            } m_VppEncodeFrameInfoInternal;
+            VppEncodeFrameInfoInternal *m_pInternalEncodedFrameInfo;
+#endif
     };
 }; // namespace MfxHwVideoProcessing
 

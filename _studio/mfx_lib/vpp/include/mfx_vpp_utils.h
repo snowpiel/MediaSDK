@@ -1,4 +1,4 @@
-// Copyright (c) 2017 Intel Corporation
+// Copyright (c) 2018 Intel Corporation
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -157,6 +157,7 @@ mfxU16 EstimatePicStruct(
     mfxU16 height);
 
 mfxU16 MapDNFactor( mfxU16 denoiseFactor );
+mfxU16 DeriveFType(mfxU16 frameIdx, mfxU16 N, mfxU16 M, bool openGOP, bool DisOrder);
 
 mfxU32 GetMFXFrcMode(const mfxVideoParam & videoParam);
 mfxStatus SetMFXFrcMode(const mfxVideoParam & videoParam, mfxU32 mode);

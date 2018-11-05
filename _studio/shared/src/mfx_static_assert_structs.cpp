@@ -323,6 +323,9 @@
 #if (MFX_VERSION >= 1026)
         MSDK_STATIC_ASSERT_STRUCT_SIZE(mfxExtVppMctf                ,64   )
 #endif
+#if (MFX_VERSION >= 1028)
+        MSDK_STATIC_ASSERT_STRUCT_SIZE(mfxExtHVSNoiseReduction     ,168  )
+#endif
     #elif defined(LINUX32)
         MSDK_STATIC_ASSERT_STRUCT_SIZE(mfxFrameId                   ,8   )
         MSDK_STATIC_ASSERT_STRUCT_SIZE(mfxFrameInfo                 ,68  )
@@ -409,6 +412,9 @@
 #endif
 #if (MFX_VERSION >= 1026)
         MSDK_STATIC_ASSERT_STRUCT_SIZE(mfxExtVppMctf                ,64  )
+#endif
+#if (MFX_VERSION >= 1028)
+        MSDK_STATIC_ASSERT_STRUCT_SIZE(mfxExtHVSNoiseReduction      ,168 )
 #endif
     #endif
 #endif //defined (__MFXSTRUCTURES_H__)
@@ -1244,6 +1250,10 @@
         MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtVppMctf                ,Header         ,0    )
         MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtVppMctf                ,FilterStrength ,8    )
 #endif
+#if (MFX_VERSION >= 1028)
+        MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtHVSNoiseReduction      ,Header         ,0    )
+        MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtHVSNoiseReduction      ,HvsDenoiseProfile,8  )
+#endif
     #elif defined(LINUX32)
         MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxFrameId                         ,TemporalId                    ,0    )
         MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxFrameId                         ,PriorityId                    ,2    )
@@ -1883,6 +1893,10 @@
 #if (MFX_VERSION >= 1026)
         MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtVppMctf                ,Header         ,0    )
         MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtVppMctf                ,FilterStrength ,8    )
+#endif
+#if (MFX_VERSION >= 1028)
+        MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtHVSNoiseReduction      ,Header         ,0    )
+        MSDK_STATIC_ASSERT_STRUCT_OFFSET(mfxExtHVSNoiseReduction      ,HvsDenoiseProfile,8    )
 #endif
     #endif
 #endif //defined (__MFXSTRUCTURES_H__)

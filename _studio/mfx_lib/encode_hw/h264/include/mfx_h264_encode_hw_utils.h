@@ -2120,6 +2120,18 @@ namespace MfxHwH264Encode
         mfxI32      m_LtrOrder;
         mfxI32      m_RefQp;
         mfxI32      m_RefOrder;
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        mfxExtHVSNoiseReduction m_ExtEncHVSNoiseReduction;
+        mfxExtHVSNoiseReduction * m_pExtEncHVSNoiseReduction;
+
+        struct HVSNoiseReductionEncInternal {
+            bool bEnableHVSNoiseReduction;
+            mfxHDL pthis; // Pointer to VPP HVSNoiseReduction instance.
+            mfxStatus(MFX_CDECL *UpdateEncodeInfo)       (mfxHDL pthis, mfxHVSNoiseReductionFrameParam* par); 
+        } m_HVSNoiseReduction;
+        mfxHVSNoiseReductionFrameParam m_mfxHVSNoiseReductionFrameParam;
+#endif
+
 
     };
 

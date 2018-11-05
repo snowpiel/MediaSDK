@@ -80,6 +80,15 @@ mfxStatus GetExternalFramesCount(VideoCORE* core,
                 break;
             }
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+            case (mfxU32)MFX_EXTBUFF_HVS_NOISE_REDUCTION:
+            {
+                inputFramesCount[filterIndex] = MFXVideoVPPDenoise::GetInFramesCountExt();
+                outputFramesCount[filterIndex] = MFXVideoVPPDenoise::GetOutFramesCountExt();
+                break;
+            }
+#endif
+
 #ifdef MFX_ENABLE_MCTF
             case (mfxU32)MFX_EXTBUFF_VPP_MCTF:
             {

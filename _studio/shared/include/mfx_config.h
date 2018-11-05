@@ -128,8 +128,10 @@
 
 // The line below HAS to be changed to MFX_VERSION specific version i.e. 1027
 // after inclusion of respective features into official API
+#define MFX_ENABLE_HVS_NOISE_REDUCTION //temp
 #if MFX_VERSION >= MFX_VERSION_NEXT
     #define MFX_ENABLE_VPP_RUNTIME_HSBC
+    
 #endif
 
 #if defined(MFX_VA_LINUX)

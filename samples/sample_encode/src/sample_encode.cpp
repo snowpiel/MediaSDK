@@ -168,6 +168,13 @@ void PrintHelp(msdk_char *strAppName, const msdk_char *strErrorMessage, ...)
     msdk_printf(MSDK_STRING("                   2: two views are encoded in separate files\n"));
     msdk_printf(MSDK_STRING("                   3: behaves like 2 -o opitons was used and then one -o\n\n"));
     msdk_printf(MSDK_STRING("Example: %s mvc -i InputYUVFile_1 -i InputYUVFile_2 -o OutputEncodedFile_1 -o OutputEncodedFile_2 -viewoutput -w width -h height \n"), strAppName);
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    msdk_printf(MSDK_STRING("   [-HVSNoiseReduction] - Profile controls Denoise strength from conservative to aggressive mode in range [0-16] \n"));
+    msdk_printf(MSDK_STRING("   .............  - 0: No denoise\n"));
+    msdk_printf(MSDK_STRING("   .............  - 10: Default value\n"));
+    msdk_printf(MSDK_STRING("   .............  - 16: Most aggressive mode\n"));
+    msdk_printf(MSDK_STRING("Example: %s h264 -i InputYUVFile  -o OutputEncodedFile  -HVSNoiseReduction 10 -w width -h height -d3d11 \n"), strAppName);
+#endif
     // user module options
     msdk_printf(MSDK_STRING("User module options: \n"));
     msdk_printf(MSDK_STRING("   [-angle 180] - enables 180 degrees picture rotation before encoding, CPU implementation by default. Rotation requires NV12 input. Options -tff|bff, -dstw, -dsth, -d3d are not effective together with this one, -nv12 is required.\n"));
@@ -743,6 +750,17 @@ mfxStatus ParseInputString(msdk_char* strInput[], mfxU8 nArgNum, sInputParams* p
                 return MFX_ERR_UNSUPPORTED;
             }
         }
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+        else if (0 == msdk_strcmp(strInput[i], MSDK_STRING("-HVSNoiseReduction")))
+        {
+            VAL_CHECK(i+1 >= nArgNum, i, strInput[i]);
+            if (MFX_ERR_NONE != msdk_opt_read(strInput[++i], pParams->HVSNoiseReduction))
+            {
+                PrintHelp(strInput[0], MSDK_STRING("HVSNoise reduction profile method is invalid.  Range is [0,16]"));
+                return MFX_ERR_UNSUPPORTED;
+            }
+        }
+#endif
         else if (0 == msdk_strcmp(strInput[i], MSDK_STRING("-b")))
         {
 

@@ -1606,6 +1606,9 @@ bool MfxHwH264Encode::IsRunTimeExtBufferIdSupported(MfxVideoParam const & video,
 #if defined (MFX_ENABLE_MFE)
         || id == MFX_EXTBUFF_MULTI_FRAME_CONTROL
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        || id == MFX_EXTBUFF_HVS_NOISE_REDUCTION
+#endif
 #if defined (MFX_ENABLE_H264_VIDEO_FEI_ENCPAK)
         || (isFeiENCPAK &&
              (  id == MFX_EXTBUFF_FEI_SLICE
@@ -1733,6 +1736,9 @@ bool MfxHwH264Encode::IsVideoParamExtBufferIdSupported(mfxU32 id)
 #if defined (MFX_ENABLE_MFE)
         || id == MFX_EXTBUFF_MULTI_FRAME_PARAM
         || id == MFX_EXTBUFF_MULTI_FRAME_CONTROL
+#endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        || id == MFX_EXTBUFF_HVS_NOISE_REDUCTION
 #endif
         );
 }
@@ -7418,6 +7424,9 @@ MfxVideoParam::MfxVideoParam()
     , m_MfeParam()
     , m_MfeControl()
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    , m_mfxExtHVSNoiseReduction()
+#endif
     , calcParam()
 {
     memset(m_extParam, 0, sizeof(m_extParam));
@@ -7657,6 +7666,9 @@ void MfxVideoParam::Construct(mfxVideoParam const & par)
     CONSTRUCT_EXT_BUFFER(mfxExtMultiFrameControl, m_MfeControl);
 #endif
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    CONSTRUCT_EXT_BUFFER(mfxExtHVSNoiseReduction, m_mfxExtHVSNoiseReduction);
+#endif
 
 #undef CONSTRUCT_EXT_BUFFER
 #undef CONSTRUCT_EXT_BUFFER_EX

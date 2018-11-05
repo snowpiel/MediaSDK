@@ -905,6 +905,7 @@ enum {
     MFX_EXTBUFF_AVC_SCALING_MATRIX              = MFX_MAKEFOURCC('A','V','S','M'),
     MFX_EXTBUFF_MPEG2_QUANT_MATRIX              = MFX_MAKEFOURCC('M','2','Q','M'),
     MFX_EXTBUFF_TASK_DEPENDENCY                 = MFX_MAKEFOURCC('S','Y','N','C'),
+    MFX_EXTBUFF_HVS_NOISE_REDUCTION             = MFX_MAKEFOURCC('H','V','S','P'),
 #endif
 };
 
@@ -2123,6 +2124,42 @@ typedef struct {
 } mfxExtVppMctf;
 
 #endif
+
+#if (MFX_VERSION >= 1028) //temp, to replace with #if (MFX_VERSION >= MFX_VERSION_NEXT)
+// HVS Noise Reduction
+enum {
+    MFX_HVS_DEFAULT_QP = 22 // Value recommended by Architecture team
+};
+
+// Frame parameters passed from Encode to VPP in callback function
+typedef struct {
+    mfxU32 reserved[10];
+    mfxI16 EncodedFrameQuality;             // Frame-level QP
+    mfxU16 FrameType;                       // I, P, B, Bref in [0,3]
+    mfxI16 Profile;                         // user input in [0,16]
+} mfxHVSNoiseReductionFrameParam;
+
+/* Structure contains set of callbacks to update VPP with encode parameters.
+Can be attached to mfxVideoParam structure during encoder and vpp initialization.
+*/
+typedef struct {
+    mfxExtBuffer Header;
+    mfxU16 HvsDenoiseProfile;   //user input in [0,16]
+    mfxU16 EncodeQuality[4];    // QP for I,P, B, B_ref provided by user for CQP
+    mfxI16 GopPicSize;          // GOP size to be updated by ENCODE
+    mfxI16 GopRefDist;          // Number of B frames to be updated by ENCODE
+    mfxI16 GopOptFlag;          // to be updated by ENCODE
+
+    mfxHDL pthis;               // Pointer to VPP internal structure. Will be passed to each mfxExtHVSNoiseReduction callback.
+
+    // Update VPP with encode parameters.
+    // Will be invoked in VPP after encoding of each frame. In - pthis, common structure containing QP to be updated and current frameType.
+    mfxStatus(MFX_CDECL *UpdateEncodeInfo)       (mfxHDL pthis, mfxHVSNoiseReductionFrameParam* par);
+
+    mfxU32 reserved[12];
+    mfxHDL reserved1[10];
+} mfxExtHVSNoiseReduction;
+#endif // MFX_VERSION >= MFX_VERSION_NEXT
 
 #ifdef __cplusplus
 } // extern "C"

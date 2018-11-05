@@ -55,6 +55,9 @@ const mfxU32 g_TABLE_DO_USE [] =
 #ifdef MFX_ENABLE_MCTF
     MFX_EXTBUFF_VPP_MCTF,
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    MFX_EXTBUFF_HVS_NOISE_REDUCTION,
+#endif
     MFX_EXTBUFF_VPP_SCENE_ANALYSIS,
     MFX_EXTBUFF_VPP_PROCAMP,
     MFX_EXTBUFF_VPP_DETAIL,
@@ -77,6 +80,9 @@ const mfxU32 g_TABLE_DO_USE [] =
 const mfxU32 g_TABLE_CONFIG [] =
 {
     MFX_EXTBUFF_VPP_DENOISE,
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    MFX_EXTBUFF_HVS_NOISE_REDUCTION,
+#endif
 #ifdef MFX_ENABLE_MCTF
     MFX_EXTBUFF_VPP_MCTF,
 #endif
@@ -110,6 +116,9 @@ const mfxU32 g_TABLE_EXT_PARAM [] =
     MFX_EXTBUFF_VPP_DENOISE,
 #ifdef MFX_ENABLE_MCTF
     MFX_EXTBUFF_VPP_MCTF,
+#endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    MFX_EXTBUFF_HVS_NOISE_REDUCTION,
 #endif
     MFX_EXTBUFF_VPP_SCENE_ANALYSIS,
     MFX_EXTBUFF_VPP_PROCAMP,
@@ -512,7 +521,13 @@ void ShowPipeline( std::vector<mfxU32> pipelineList )
                 fprintf(stderr, "DENOISE \n");
                 break;
             }
-
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+            case (mfxU32)MFX_EXTBUFF_HVS_NOISE_REDUCTION:
+            {
+                fprintf(stderr, "HVS NOISE REDUCTION \n");
+                break;
+            }
+#endif
             case (mfxU32)MFX_EXTBUFF_VPP_RSHIFT_IN:
             {
                 fprintf(stderr, "MFX_EXTBUFF_VPP_RSHIFT_IN \n");
@@ -718,6 +733,13 @@ void ReorderPipelineListForQuality( std::vector<mfxU32> & pipelineList )
         newList[index] = MFX_EXTBUFF_VPP_RESIZE;
         index++;
     }*/
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    if (IsFilterFound(&pipelineList[0], (mfxU32)pipelineList.size(), MFX_EXTBUFF_HVS_NOISE_REDUCTION))
+    {
+        newList[index] = MFX_EXTBUFF_HVS_NOISE_REDUCTION;
+        index++;
+    }
+#endif
     if( IsFilterFound( &pipelineList[0], (mfxU32)pipelineList.size(), MFX_EXTBUFF_VPP_DENOISE ) )
     {
         newList[index] = MFX_EXTBUFF_VPP_DENOISE;
@@ -1133,6 +1155,16 @@ mfxStatus GetPipelineList(
         if (videoParam->ExtParam[i] && videoParam->ExtParam[i]->BufferId == MFX_EXTBUFF_VPP_MCTF)
         {
             pipelineList.push_back(MFX_EXTBUFF_VPP_MCTF);
+            break;
+        }
+    }
+#endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    for (mfxU32 i = 0; i < videoParam->NumExtParam; i++)
+    {
+        if (videoParam->ExtParam[i] && videoParam->ExtParam[i]->BufferId == MFX_EXTBUFF_HVS_NOISE_REDUCTION)
+        {
+            pipelineList.push_back(MFX_EXTBUFF_HVS_NOISE_REDUCTION);
             break;
         }
     }
@@ -2186,6 +2218,12 @@ void ConvertCaps2ListDoUse(MfxHwVideoProcessing::mfxVppCaps& caps, std::vector<m
         list.push_back(MFX_EXTBUFF_VPP_MCTF);
     }
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    if (caps.uHvsDenoise)
+    {
+        list.push_back(MFX_EXTBUFF_HVS_NOISE_REDUCTION);
+    }
+#endif
     if(caps.uDenoiseFilter)
     {
         list.push_back(MFX_EXTBUFF_VPP_DENOISE);
@@ -2254,6 +2292,77 @@ void ConvertCaps2ListDoUse(MfxHwVideoProcessing::mfxVppCaps& caps, std::vector<m
 
 } // void ConvertCaps2ListDoUse(MfxHwVideoProcessing::mfxVppCaps& caps, std::vector<mfxU32> list)
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+  // ----------------------------------------------------------------
+  // HVSVP herlper function
+  // ----------------------------------------------------------------
+
+enum HvsNoiseReductionFrameType {
+    Iframe = 0x0,
+    Pframe = 0x1,
+    Bframe = 0x2,
+    NO_FRAME_TYPE = 0xFF
+};
+
+/// This function retuns current frame type
+/*
+  /param [in]  frameIdx - current frame Id starting with 0
+  /param [in]  N Gop size
+  /param [in] M reference distance in Gop
+  /param [in] openGOP - 1 if GOP is open
+  /pram [out] return Frame type - 0 for I frame, 1 for P frame, 2 for B frame, returns 0xFF on error
+
+  For example, when M=3, Gop structure is IBBP
+*/
+mfxU16 DeriveFType(mfxU16 frameIdx, mfxU16 N, mfxU16 M, bool openGOP, bool DisOrder)
+{
+    if( N == 0 )
+    {
+        printf("DeriveFType: ERROR in DeriveFType: Gop Size N==0 \n");
+       return 0xFF;
+    }
+
+    if( M == 0 )
+    {
+        printf("DeriveFType: ERROR in DeriveFType: Reference distance ==0 \n");
+        M = 1;
+       return 0xFF;
+    }
+    int IdxInGOP = frameIdx % N;
+
+    if(DisOrder)
+    {
+        if(IdxInGOP == 0)
+            return Iframe;
+        else if((IdxInGOP % M == 0) || ((IdxInGOP % N == (N-1)) && !openGOP))
+            return Pframe;
+        else
+            return Bframe;
+    }
+    else
+    {
+        if(openGOP)
+        {
+            if(IdxInGOP == (N-M+1) || frameIdx == 0)
+                return Iframe;
+            else if(IdxInGOP % M == 1)
+                return Pframe;
+            else
+                return Bframe;
+        }
+        else // CloseGOP case:
+        {
+            if(IdxInGOP == 0)
+                return Iframe;
+            else if(IdxInGOP % M == 1)
+                return Pframe;
+            else
+                return Bframe;
+        }
+    }
+}
+
+#endif //MFX_ENABLE_HVS_NOISE_REDUCTION
 
 #endif // MFX_ENABLE_VPP
 /* EOF */

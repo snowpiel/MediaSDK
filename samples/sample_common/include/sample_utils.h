@@ -560,7 +560,11 @@ template<>struct mfx_ext_buffer_id<mfxExtAVCRefListCtrl>{
 template<>struct mfx_ext_buffer_id<mfxExtThreadsParam>{
     enum {id = MFX_EXTBUFF_THREADS_PARAM};
 };
-
+#if (MFX_VERSION >= MFX_VERSION_NEXT)
+template<>struct mfx_ext_buffer_id<mfxExtHVSNoiseReduction>{
+    enum { id = MFX_EXTBUFF_HVS_NOISE_REDUCTION};
+};
+#endif
 
 //helper function to initialize mfx ext buffer structure
 template <class T>

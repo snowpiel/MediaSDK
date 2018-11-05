@@ -1853,6 +1853,10 @@ VideoVPPHW::VideoVPPHW(IOMode mode, VideoCORE *core)
 ,m_pCmProgram(NULL)
 ,m_pCmKernel(NULL)
 ,m_pCmQueue(NULL)
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+, m_VppEncodeFrameInfoInternal()
+, m_pInternalEncodedFrameInfo(NULL)
+#endif
 {
     m_config.m_bRefFrameEnable = false;
     m_config.m_bMode30i60pEnable = false;
@@ -2044,6 +2048,16 @@ mfxStatus VideoVPPHW::GetVideoParams(mfxVideoParam *par) const
             MFX_CHECK_NULL_PTR1(bufFRC);
             bufFRC->Algorithm = m_executeParams.frcModeOrig;
         }
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        else if (MFX_EXTBUFF_HVS_NOISE_REDUCTION == bufferId)
+        {
+            mfxExtHVSNoiseReduction *bufHVSNR = reinterpret_cast<mfxExtHVSNoiseReduction *>(par->ExtParam[i]);
+            MFX_CHECK_NULL_PTR1(bufHVSNR);
+            bufHVSNR->HvsDenoiseProfile = m_executeParams.HvsvpMode;
+            bufHVSNR->pthis = (mfxHDL)&m_pInternalEncodedFrameInfo; //points to VPP HVS Noise Reduction Info inside VPP
+            bufHVSNR->UpdateEncodeInfo = &UpdateEncodeInfo; // point to VPP function
+        }
+#endif
     }
 
     return MFX_ERR_NONE;
@@ -2367,6 +2381,9 @@ mfxStatus  VideoVPPHW::Init(
             MFX_CHECK_STS(sts);
         }
     }
+#endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    InitHVSNoiseReductionVPPInternalParam();
 #endif
     return (bIsFilterSkipped) ? MFX_WRN_FILTER_SKIPPED : MFX_ERR_NONE;
 
@@ -2884,6 +2901,13 @@ mfxStatus VideoVPPHW::Close()
     // sync workload mode by default
     m_workloadMode = VPP_SYNC_WORKLOAD;
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    FreeHVSNoiseReductionVPPInternalParam();
+    if (m_pInternalEncodedFrameInfo)
+        m_pInternalEncodedFrameInfo = NULL;
+    if (m_VppEncodeFrameInfoInternal.Profile)
+        memset(&m_VppEncodeFrameInfoInternal, 0, sizeof(VppEncodeFrameInfoInternal));
+#endif
 
 #if defined (MFX_ENABLE_SCENE_CHANGE_DETECTION_VPP)
     m_SCD.Close();
@@ -4272,6 +4296,9 @@ mfxStatus VideoVPPHW::SyncTaskSubmission(DdiTask* pTask)
         }
     }
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    UpdateHVSExecuteParams();
+#endif
 
     MfxHwVideoProcessing::mfxExecuteParams  execParams = m_executeParams;
     sts = MergeRuntimeParams(pTask, &execParams);
@@ -5320,6 +5347,23 @@ mfxStatus ConfigureExecuteParams(
 
                 break;
             }
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+            case MFX_EXTBUFF_HVS_NOISE_REDUCTION:
+            {
+                if (caps.uHvsDenoise)
+                {
+                    for (mfxU32 i = 0; i < videoParam.NumExtParam; i++)
+                    {
+                        if (videoParam.ExtParam[i]->BufferId == MFX_EXTBUFF_HVS_NOISE_REDUCTION)
+                        {
+                            mfxExtHVSNoiseReduction *extHVSNoiseReduction = (mfxExtHVSNoiseReduction*)videoParam.ExtParam[i];
+                            executeParams.HvsvpMode = extHVSNoiseReduction->HvsDenoiseProfile;
+                            executeParams.encodeQuality = MFX_HVS_DEFAULT_QP;
+                        }
+                    }
+                }
+            }
+#endif
             case MFX_EXTBUFF_VPP_ROTATION:
             {
                 if (caps.uRotation)
@@ -6033,6 +6077,12 @@ mfxStatus ConfigureExecuteParams(
                     executeParams.bEnableMctf = false;
                 }
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+                else if (MFX_EXTBUFF_HVS_NOISE_REDUCTION == bufferId)
+                {
+                    executeParams.HvsvpMode = 0;
+                }
+#endif
                 else
                 {
                     // filter cannot be disabled
@@ -6088,7 +6138,110 @@ mfxStatus ConfigureExecuteParams(
 
 } // mfxStatus ConfigureExecuteParams(...)
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+  // This call back function gets updated internal VPP structure with info from Encoder
+  // [in] pthis - VppEncodeFrameInfoInternal instance inside VPP
+  // [in] info - struture containing the frame information passed by encoder
+mfxStatus VideoVPPHW::UpdateEncodeInfo(mfxHDL pthis, mfxHVSNoiseReductionFrameParam* info)
+{
+    if (!pthis || !info)
+        return MFX_ERR_NULL_PTR;
+    VppEncodeFrameInfoInternal* pInternalEncodedFrameInfo = (VppEncodeFrameInfoInternal*)pthis;
 
+    UMC::AutomaticUMCMutex guard(pInternalEncodedFrameInfo->m_mtx);
+
+    // update pEncodedFrameInfo values from info
+    pInternalEncodedFrameInfo->EncodeQuality[info->FrameType] = info->EncodedFrameQuality; 
+    pInternalEncodedFrameInfo->isUpdated = true;
+
+    return MFX_ERR_NONE;
+}
+
+/// intitialiaze internal param from external buffer
+mfxStatus VideoVPPHW::InitHVSNoiseReductionVPPInternalParam()
+{
+    mfxU32 i = 0;
+
+    // get m_pInternalEncodedFrameInfo from list of external buffers
+    if (m_params.NumExtParam)
+    {
+        // check for extended surface
+        for (i = 0; i < m_params.NumExtParam; i++)
+        {
+            MFX_CHECK_NULL_PTR1(m_params.ExtParam[i]);
+            mfxU32 bufferId = m_params.ExtParam[i]->BufferId;
+
+            if (MFX_EXTBUFF_HVS_NOISE_REDUCTION == bufferId)
+            {
+                mfxExtHVSNoiseReduction *HVSNR_buffer = reinterpret_cast<mfxExtHVSNoiseReduction *>(m_params.ExtParam[i]);
+                m_VppEncodeFrameInfoInternal.EncodeQuality[0] = HVSNR_buffer->EncodeQuality[0];
+                m_VppEncodeFrameInfoInternal.EncodeQuality[1] = HVSNR_buffer->EncodeQuality[1];
+                m_VppEncodeFrameInfoInternal.EncodeQuality[2] = HVSNR_buffer->EncodeQuality[2];
+                m_VppEncodeFrameInfoInternal.isUpdated = false;
+                m_VppEncodeFrameInfoInternal.Profile = HVSNR_buffer->HvsDenoiseProfile;
+
+                // Register call back function and internal VPP structure to be updated in VPP
+                HVSNR_buffer->UpdateEncodeInfo = &UpdateEncodeInfo;
+                HVSNR_buffer->pthis = (mfxHDL)&m_VppEncodeFrameInfoInternal;
+
+                // initialize Encode params and execute params
+                m_params.mfx.GopPicSize = HVSNR_buffer->GopPicSize;
+                m_params.mfx.GopRefDist = HVSNR_buffer->GopRefDist;
+                m_params.mfx.GopOptFlag = HVSNR_buffer->GopOptFlag;
+                m_executeParams.HvsvpMode = HVSNR_buffer->HvsDenoiseProfile;
+                m_executeParams.encodeQuality = HVSNR_buffer->EncodeQuality[0];
+            }
+        }
+    }
+
+    return MFX_ERR_NONE;
+}
+
+mfxStatus VideoVPPHW::FreeHVSNoiseReductionVPPInternalParam()
+{
+    mfxU32 i = 0;
+
+    // get m_pInternalEncodedFrameInfo from list of external buffers
+    if (m_params.NumExtParam)
+    {
+        // check for extended surface
+        for (i = 0; i < m_params.NumExtParam; i++)
+        {
+            MFX_CHECK_NULL_PTR1(m_params.ExtParam[i]);
+            mfxU32 bufferId = m_params.ExtParam[i]->BufferId;
+
+            if (MFX_EXTBUFF_HVS_NOISE_REDUCTION == bufferId)
+            {
+                mfxExtHVSNoiseReduction *HVSNR_buffer = reinterpret_cast<mfxExtHVSNoiseReduction *>(m_params.ExtParam[i]);
+                HVSNR_buffer->EncodeQuality[0] = 0;
+                HVSNR_buffer->EncodeQuality[1] = 0;
+                HVSNR_buffer->EncodeQuality[2] = 0;
+                HVSNR_buffer->EncodeQuality[3] = 0;
+                HVSNR_buffer->HvsDenoiseProfile = 0;
+
+                HVSNR_buffer->UpdateEncodeInfo = nullptr;
+                HVSNR_buffer->pthis = nullptr;
+            }
+        }
+    }
+
+
+    return MFX_ERR_NONE;
+}
+/// Update executeParams using data from encoder for each frame
+mfxStatus VideoVPPHW::UpdateHVSExecuteParams()
+{
+    mfxU32 currentFrameId = m_executeParams.statusReportID;
+    mfxU16 GopOptFlag = 0;
+
+    // Get QP to send to driver
+    mfxU16 currentFrameType = DeriveFType((mfxU16)currentFrameId, m_params.mfx.GopPicSize, m_params.mfx.GopRefDist, !(GopOptFlag == 1), true); //Hardcode to true for "Display order"
+
+    m_executeParams.encodeQuality = m_VppEncodeFrameInfoInternal.EncodeQuality[currentFrameType];
+    return MFX_ERR_NONE;
+}
+
+#endif //MFX_ENABLE_HVS_NOISE_REDUCTION
 //---------------------------------------------------------
 // UTILS
 //---------------------------------------------------------

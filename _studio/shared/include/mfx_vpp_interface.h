@@ -181,6 +181,10 @@ namespace MfxHwVideoProcessing
 
         mfxU32 uMirroring;
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        mfxU32 uHvsDenoise;
+#endif
+
         mfxVppCaps()
             : uAdvancedDI(0)
             , uSimpleDI(0)
@@ -208,6 +212,9 @@ namespace MfxHwVideoProcessing
             , uChromaSiting(0)
             , mFormatSupport()
             , uMirroring(0)
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+            , uHvsDenoise(0)
+#endif
         {
         };
     };
@@ -299,6 +306,10 @@ namespace MfxHwVideoProcessing
                , MctfMVPrecision(MFX_MVPRECISION_INTEGER)
 #endif
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+                , HvsvpMode(0)
+                , encodeQuality(MFX_HVS_DEFAULT_QP)
+#endif
                , reset(0)
             {
                    memset(&targetSurface, 0, sizeof(mfxDrvSurface));
@@ -346,6 +357,9 @@ namespace MfxHwVideoProcessing
 #endif
 #ifdef MFX_ENABLE_MCTF
                     || bEnableMctf != false
+#endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+                    || HvsvpMode != 0
 #endif
                 )
                     return false;
@@ -437,6 +451,10 @@ namespace MfxHwVideoProcessing
         mfxU16       MctfTemporalMode;
         mfxU16       MctfMVPrecision;
 #endif
+#endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        mfxU16         HvsvpMode;     // mode in [0,16], 0 - None, 10 - default, 16- Agressive
+        mfxU16         encodeQuality; // HVSVP Qp for now
 #endif
         bool reset;
     };

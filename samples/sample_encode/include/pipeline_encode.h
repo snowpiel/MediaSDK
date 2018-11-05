@@ -183,6 +183,10 @@ struct sInputParams
     enum AtomISPMode MipiMode;
 #endif
 
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    mfxU8 HVSNoiseReduction;
+#endif
+
 };
 
 struct bufSet
@@ -335,6 +339,11 @@ public:
     pthread_t m_PollThread;
 #endif
 
+#if defined ENABLE_HVS_NOISE_REDUCTION
+    mfxHVSNoiseReductionFrameParam m_HVSNoiseReductionframeParam;
+    mfxExtHVSNoiseReduction m_ExtHVSNoiseReduction;
+#endif
+
 protected:
     std::pair<CSmplBitstreamWriter *,CSmplBitstreamWriter *> m_FileWriters;
     CSmplYUVReader m_FileReader;
@@ -413,6 +422,14 @@ protected:
 
     CTimeStatisticsReal m_statOverall;
     CTimeStatisticsReal m_statFile;
+
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    mfxU8 m_nHVSNoiseReductionProfile; // 0: no Denoise, 1: conservative visual mode. 10: Default, 16: most aggressive
+
+    virtual mfxStatus InitVppHVSNoiseReduction(sInputParams *pInParams);
+    virtual mfxStatus FreeVppHVSNoiseReduction();
+#endif
+
     virtual mfxStatus InitMfxEncParams(sInputParams *pParams);
     virtual mfxStatus InitMfxVppParams(sInputParams *pParams);
 

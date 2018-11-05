@@ -746,6 +746,17 @@ STRUCT(mfxExtFeiHevcEncQP,
     FIELD_T(mfxU32,       Height)
     FIELD_T(mfxU8*,       Data)
 )
+
+STRUCT(mfxExtHVSNoiseReduction,
+    FIELD_S(mfxExtBuffer, Header            )
+    FIELD_T(mfxU16,       HvsDenoiseProfile )
+    FIELD_T(mfxU16,       EncodeQuality     )
+    FIELD_T(mfxU16,       GopPicSize        )
+    FIELD_T(mfxU16,       GopRefDist        )
+    FIELD_T(mfxU16,       GopOptFlag        )
+    FIELD_T(mfxHDL,       pthis             )
+    FIELD_T(mfxHDL,       UpdateEncodeInfo  )
+)
 #endif
 
 STRUCT(mfxExtCamGammaCorrection,

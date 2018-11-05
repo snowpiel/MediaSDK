@@ -365,6 +365,48 @@ mfxStatus CEncodingPipeline::AllocAndInitMVCSeqDesc()
     return MFX_ERR_NONE;
 }
 
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+mfxStatus CEncodingPipeline::InitVppHVSNoiseReduction(sInputParams *pInParams)
+{
+
+    mfxU16 defaultQP = MFX_HVS_DEFAULT_QP;
+    m_ExtHVSNoiseReduction.Header.BufferId = MFX_EXTBUFF_HVS_NOISE_REDUCTION;
+    m_ExtHVSNoiseReduction.Header.BufferSz = sizeof(mfxExtHVSNoiseReduction);
+    m_ExtHVSNoiseReduction.HvsDenoiseProfile = pInParams->HVSNoiseReduction;
+    m_ExtHVSNoiseReduction.UpdateEncodeInfo = nullptr;
+
+    if (pInParams->nQPI) {
+        m_ExtHVSNoiseReduction.EncodeQuality[0] = pInParams->nQPI;
+        m_ExtHVSNoiseReduction.EncodeQuality[1] = pInParams->nQPP;
+        m_ExtHVSNoiseReduction.EncodeQuality[2] = pInParams->nQPB;
+        m_HVSNoiseReductionframeParam.EncodedFrameQuality = pInParams->nQPI;
+        m_mfxVppParams.mfx.RateControlMethod = MFX_RATECONTROL_CQP;
+    }
+    else {
+        m_HVSNoiseReductionframeParam.EncodedFrameQuality = defaultQP;
+        m_ExtHVSNoiseReduction.EncodeQuality[0] = defaultQP;
+        m_ExtHVSNoiseReduction.EncodeQuality[1] = defaultQP;
+        m_ExtHVSNoiseReduction.EncodeQuality[2] = defaultQP;
+    }
+
+    if (!m_nHVSNoiseReductionProfile)
+        m_nHVSNoiseReductionProfile = pInParams->HVSNoiseReduction;
+
+    return MFX_ERR_NONE;
+}
+
+mfxStatus CEncodingPipeline::FreeVppHVSNoiseReduction()
+{
+    if (m_ExtHVSNoiseReduction.HvsDenoiseProfile)
+    {
+        memset(&m_ExtHVSNoiseReduction, 0, sizeof(mfxExtHVSNoiseReduction));
+        memset(&m_HVSNoiseReductionframeParam, 0, sizeof(mfxHVSNoiseReductionFrameParam));
+    }
+
+    return MFX_ERR_NONE;
+}
+#endif
+
 mfxStatus CEncodingPipeline::AllocAndInitVppDoNotUse()
 {
     m_VppDoNotUse.NumAlg = 4;
@@ -547,6 +589,13 @@ mfxStatus CEncodingPipeline::InitMfxEncParams(sInputParams *pInParams)
         m_EncExtParams.push_back((mfxExtBuffer *)&m_CodingOption);
     }
 
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    if (pInParams->HVSNoiseReduction)
+    {
+        m_EncExtParams.push_back((mfxExtBuffer *)&m_ExtHVSNoiseReduction);
+    }
+#endif
+
     // configure the depth of the look ahead BRC if specified in command line
     if (pInParams->nLADepth || pInParams->nMaxSliceSize || pInParams->nMaxFrameSize || pInParams->nBRefType ||
         (pInParams->nExtBRC && (pInParams->CodecId == MFX_CODEC_HEVC || pInParams->CodecId == MFX_CODEC_AVC)) ||
@@ -722,6 +771,13 @@ mfxStatus CEncodingPipeline::InitMfxVppParams(sInputParams *pInParams)
 
     if (MVC_ENABLED & pInParams->MVC_flags)
         m_VppExtParams.push_back((mfxExtBuffer *)&m_MVCSeqDesc);
+
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    if (pInParams->HVSNoiseReduction)
+    {
+        m_VppExtParams.push_back((mfxExtBuffer *)&m_ExtHVSNoiseReduction);
+    }
+#endif
 
     m_mfxVppParams.ExtParam = &m_VppExtParams[0]; // vector is stored linearly in memory
     m_mfxVppParams.NumExtParam = (mfxU16)m_VppExtParams.size();
@@ -1034,6 +1090,16 @@ mfxStatus CEncodingPipeline::CreateAllocator()
 
 void CEncodingPipeline::DeleteFrames()
 {
+    // check for external buffer
+    for (int i=0;i <m_VppResponse.NumFrameActual ; i++)
+    {
+        if (m_pVppSurfaces)
+        {
+            MSDK_SAFE_DELETE_ARRAY(m_pVppSurfaces[i].Data.ExtParam);
+            m_pVppSurfaces[i].Data.NumExtParam = 0;
+        }
+    }
+
     // delete surfaces array
     MSDK_SAFE_DELETE_ARRAY(m_pEncSurfaces);
     MSDK_SAFE_DELETE_ARRAY(m_pVppSurfaces);
@@ -1110,6 +1176,15 @@ CEncodingPipeline::CEncodingPipeline()
     MSDK_ZERO_MEMORY(m_VideoSignalInfo);
     m_VideoSignalInfo.Header.BufferId = MFX_EXTBUFF_VIDEO_SIGNAL_INFO;
     m_VideoSignalInfo.Header.BufferSz = sizeof(m_VideoSignalInfo);
+
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    MSDK_ZERO_MEMORY(m_ExtHVSNoiseReduction);
+    m_VideoSignalInfo.Header.BufferId = MFX_EXTBUFF_HVS_NOISE_REDUCTION;
+    m_VideoSignalInfo.Header.BufferSz = sizeof(m_ExtHVSNoiseReduction);
+
+    MSDK_ZERO_MEMORY(m_HVSNoiseReductionframeParam);
+    m_nHVSNoiseReductionProfile = 0;
+#endif
 
 #if (MFX_VERSION >= 1024)
     MSDK_ZERO_MEMORY(m_ExtBRC);
@@ -1342,9 +1417,12 @@ mfxStatus CEncodingPipeline::Init(sInputParams *pParams)
     }
 
     // create preprocessor if resizing was requested from command line
-    // or if different FourCC is set
+    // or if different FourCC or denoiser is set
     if (pParams->nWidth != pParams->nDstWidth ||
         pParams->nHeight != pParams->nDstHeight ||
+#ifdef ENABLE_HVS_NOISE_REDUCTION        
+	pParams->HVSNoiseReduction ||
+#endif
         FileFourCC2EncFourCC(pParams->FileInputFourCC) != pParams->EncodeFourCC )
 
     {
@@ -1404,6 +1482,15 @@ mfxStatus CEncodingPipeline::Init(sInputParams *pParams)
 
     sts = InitMfxEncParams(pParams);
     MSDK_CHECK_STATUS(sts, "InitMfxEncParams failed");
+
+    // Snow check order
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    if (pParams->HVSNoiseReduction)
+    {
+        sts = InitVppHVSNoiseReduction(pParams);
+        MSDK_CHECK_STATUS(sts, "InitVppHVSNoiseReduction failed");
+    }
+#endif
 
     sts = InitMfxVppParams(pParams);
     MSDK_CHECK_STATUS(sts, "InitMfxVppParams failed");
@@ -1586,6 +1673,10 @@ void CEncodingPipeline::Close()
 
     FreeMVCSeqDesc();
     FreeVppDoNotUse();
+
+#ifdef ENABLE_HVS_NOISE_REDUCTION
+    FreeVppHVSNoiseReduction();
+#endif 
 
     DeleteFrames();
 

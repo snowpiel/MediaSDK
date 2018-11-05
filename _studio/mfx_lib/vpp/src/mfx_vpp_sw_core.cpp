@@ -900,6 +900,13 @@ mfxStatus VideoVPPBase::Query(VideoCORE * core, mfxVideoParam *in, mfxVideoParam
                         continue;
                     }
 #endif
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+                    else if (MFX_EXTBUFF_HVS_NOISE_REDUCTION == in->ExtParam[i]->BufferId)
+                    {
+                        // no specific checks for HVS Noise Reduction control buffer
+                        continue;
+                    }
+#endif
                     else
                     {
                         out->ExtParam[i]->BufferId = 0;

@@ -693,6 +693,12 @@ ImplementationAvc::ImplementationAvc(VideoCORE * core)
 , m_LtrOrder(-1)
 , m_RefQp(0)
 , m_RefOrder(-1)
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+, m_ExtEncHVSNoiseReduction()
+, m_pExtEncHVSNoiseReduction()
+, m_HVSNoiseReduction()
+, m_mfxHVSNoiseReductionFrameParam()
+#endif
 {
     memset(&m_recNonRef, 0, sizeof(m_recNonRef));
 }
@@ -1179,7 +1185,27 @@ mfxStatus ImplementationAvc::Init(mfxVideoParam * par)
 
     m_videoInit = m_video;
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    m_HVSNoiseReduction.bEnableHVSNoiseReduction = false;
+    /* check for mfxExtHVSNoiseReduction buffer attached by application */
 
+    if (par->NumExtParam)
+    {
+        mfxExtHVSNoiseReduction *ExtEncHVSNoiseReduction = (mfxExtHVSNoiseReduction*)GetExtBuffer(par->ExtParam, par->NumExtParam, MFX_EXTBUFF_HVS_NOISE_REDUCTION);
+        if (ExtEncHVSNoiseReduction && ExtEncHVSNoiseReduction->HvsDenoiseProfile)
+        {
+            m_HVSNoiseReduction.bEnableHVSNoiseReduction = true;
+            m_HVSNoiseReduction.pthis = ExtEncHVSNoiseReduction->pthis;
+            m_HVSNoiseReduction.UpdateEncodeInfo = ExtEncHVSNoiseReduction->UpdateEncodeInfo;
+            ExtEncHVSNoiseReduction->GopPicSize = m_video.mfx.GopPicSize;
+            ExtEncHVSNoiseReduction->GopRefDist = m_video.mfx.GopRefDist;
+            ExtEncHVSNoiseReduction->GopOptFlag = m_video.mfx.GopOptFlag;
+
+            m_pExtEncHVSNoiseReduction = ExtEncHVSNoiseReduction;
+
+        }
+    }
+#endif
     return checkStatus;
 }
 

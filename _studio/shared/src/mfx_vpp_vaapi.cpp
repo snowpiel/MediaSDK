@@ -83,6 +83,9 @@ VAAPIVideoProcessing::VAAPIVideoProcessing():
 , m_vaConfig(VA_INVALID_ID)
 , m_vaContextVPP(VA_INVALID_ID)
 , m_denoiseFilterID(VA_INVALID_ID)
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+, m_HvsNoiseReductionFilterID(VA_INVALID_ID)
+#endif
 , m_detailFilterID(VA_INVALID_ID)
 , m_deintFilterID(VA_INVALID_ID)
 , m_procampFilterID(VA_INVALID_ID)
@@ -99,6 +102,10 @@ VAAPIVideoProcessing::VAAPIVideoProcessing():
         m_filterBufs[i] = VA_INVALID_ID;
 
     memset( (void*)&m_pipelineCaps, 0, sizeof(m_pipelineCaps));
+    memset( (void*)&m_denoiseCaps, 0, sizeof(m_denoiseCaps));
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    memset( (void*)&m_HvsNoiseReductionCaps, 0, sizeof(m_HvsNoiseReductionCaps));
+#endif
     memset( (void*)&m_denoiseCaps, 0, sizeof(m_denoiseCaps));
     memset( (void*)&m_detailCaps, 0, sizeof(m_detailCaps));
     memset( (void*)&m_deinterlacingCaps, 0, sizeof(m_deinterlacingCaps));
@@ -166,6 +173,13 @@ mfxStatus VAAPIVideoProcessing::Close(void)
         vaDestroyBuffer(m_vaDisplay, m_denoiseFilterID);
     }
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    if( VA_INVALID_ID != m_HvsNoiseReductionFilterID )
+    {
+        vaDestroyBuffer(m_vaDisplay, m_HvsNoiseReductionFilterID);
+    }
+#endif
+
     if( VA_INVALID_ID != m_detailFilterID )
     {
         vaDestroyBuffer(m_vaDisplay, m_detailFilterID);
@@ -205,12 +219,18 @@ mfxStatus VAAPIVideoProcessing::Close(void)
     m_denoiseFilterID   = VA_INVALID_ID;
     m_deintFilterID     = VA_INVALID_ID;
     m_procampFilterID   = VA_INVALID_ID;
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    m_HvsNoiseReductionFilterID = VA_INVALID_ID;;
+#endif
 
     memset( (void*)&m_pipelineCaps, 0, sizeof(m_pipelineCaps));
     memset( (void*)&m_denoiseCaps, 0, sizeof(m_denoiseCaps));
     memset( (void*)&m_detailCaps, 0, sizeof(m_detailCaps));
     memset( (void*)&m_procampCaps,  0, sizeof(m_procampCaps));
     memset( (void*)&m_deinterlacingCaps, 0, sizeof(m_deinterlacingCaps));
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    memset( (void*)&m_HvsNoiseReductionCaps, 0, sizeof(m_HvsNoiseReductionCaps));
+#endif
 
     return MFX_ERR_NONE;
 
@@ -319,6 +339,20 @@ mfxStatus VAAPIVideoProcessing::QueryCapabilities(mfxVppCaps& caps)
                                &m_denoiseCaps, &num_denoise_caps);
     MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    // check if this is supported
+    mfxU32 num_HvsNoiseReduction_caps = 1;
+    vaSts = vaQueryVideoProcFilterCaps(m_vaDisplay,
+                               m_vaContextVPP,
+                               VAProcFilterHVSNoiseReduction,
+                               &m_HvsNoiseReductionCaps, &num_HvsNoiseReduction_caps);
+    if(VA_STATUS_SUCCESS != vaSts)
+        printf("\n[ERROR], HVS Noise Reduction not supported in Driver !!!\n");
+    else
+        printf("HVS Noise Reduction is supported in Driver \n");
+    MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+#endif
+
     mfxU32 num_detail_caps = 1;
     vaSts = vaQueryVideoProcFilterCaps(m_vaDisplay,
                                m_vaContextVPP,
@@ -402,6 +436,8 @@ mfxStatus VAAPIVideoProcessing::QueryCapabilities(mfxVppCaps& caps)
                 case VAProcFilterColorBalance:
                     caps.uProcampFilter = 1;
                     break;
+                case VAProcFilterHVSNoiseReduction:
+                    caps.uHvsDenoise = 1;
                default:
                     break;
             }
@@ -858,6 +894,36 @@ mfxStatus VAAPIVideoProcessing::Execute(mfxExecuteParams *pParams)
             pParams->bDenoiseAutoAdjust = false;
         }
     }
+
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    if (VA_INVALID_ID != m_HvsNoiseReductionFilterID && pParams->HvsvpMode)
+    {
+        /* Buffer was created earlier and it's time to refresh its value */
+        MFX_CHECK_STS(RemoveBufferFromPipe(m_HvsNoiseReductionFilterID));
+        m_denoiseFilterID = VA_INVALID_ID;
+    }
+
+    if (VA_INVALID_ID == m_HvsNoiseReductionFilterID)
+    {
+        if (pParams->HvsvpMode)
+        {
+            VAProcFilterParameterBufferHVSNoiseReduction HVSdenoise;
+            HVSdenoise.type  = VAProcFilterHVSNoiseReduction;
+            HVSdenoise.qp = pParams->encodeQuality;
+            HVSdenoise.strength = pParams->HvsvpMode;
+            vaSts = vaCreateBuffer((void*)m_vaDisplay,
+                          m_vaContextVPP,
+                          VAProcFilterParameterBufferType,
+                          sizeof(HVSdenoise), 1,
+                          &HVSdenoise, &m_HvsNoiseReductionFilterID);
+            MFX_CHECK_WITH_ASSERT(VA_STATUS_SUCCESS == vaSts, MFX_ERR_DEVICE_FAILED);
+
+            m_filterBufs[m_numFilterBufs++] = m_HvsNoiseReductionFilterID;
+            pParams->HvsvpMode = 0;
+            pParams->encodeQuality = 0;
+        }
+    }
+#endif
 
     if (VA_INVALID_ID != m_detailFilterID && (pParams->detailFactor || true == pParams->bDetailAutoAdjust))
     {

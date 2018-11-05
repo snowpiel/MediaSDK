@@ -216,6 +216,9 @@ namespace MfxHwH264Encode
     BIND_EXTBUF_TYPE_TO_ID (mfxExtMultiFrameParam,       MFX_EXTBUFF_MULTI_FRAME_PARAM       );
 #endif
 
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+    BIND_EXTBUF_TYPE_TO_ID (mfxExtHVSNoiseReduction,     MFX_EXTBUFF_HVS_NOISE_REDUCTION     );
+#endif
 #undef BIND_EXTBUF_TYPE_TO_ID
 
     template <class T> inline void InitExtBufHeader(T & extBuf)
@@ -577,6 +580,10 @@ namespace MfxHwH264Encode
 #if defined (MFX_ENABLE_MFE)
         mfxExtMultiFrameParam    m_MfeParam;
         mfxExtMultiFrameControl  m_MfeControl;
+#endif
+
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        mfxExtHVSNoiseReduction m_mfxExtHVSNoiseReduction;
 #endif
         std::vector<mfxMVCViewDependency> m_storageView;
         std::vector<mfxMVCOperationPoint> m_storageOp;

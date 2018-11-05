@@ -122,6 +122,9 @@ namespace MfxHwVideoProcessing
         VAContextID m_vaContextVPP;
 
         VAProcFilterCap m_denoiseCaps;
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        VAProcFilterCap m_HvsNoiseReductionCaps;
+#endif
         VAProcFilterCap m_detailCaps;
 
         VAProcPipelineCaps           m_pipelineCaps;
@@ -133,6 +136,9 @@ namespace MfxHwVideoProcessing
 #endif
 
         VABufferID m_denoiseFilterID;
+#ifdef MFX_ENABLE_HVS_NOISE_REDUCTION
+        VABufferID m_HvsNoiseReductionFilterID;
+#endif
         VABufferID m_detailFilterID;
         VABufferID m_deintFilterID;
         VABufferID m_procampFilterID;

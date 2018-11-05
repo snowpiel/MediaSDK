@@ -119,6 +119,7 @@ EXTBUF(mfxExtMoveRect               , MFX_EXTBUFF_MOVING_RECTANGLES         )
 
 #if (MFX_VERSION >= MFX_VERSION_NEXT)
 EXTBUF(mfxExtVP9DecodedFrameInfo    , MFX_EXTBUFF_VP9_DECODED_FRAME_INFO    )
+EXTBUF(mfxExtHVSNoiseReduction      , MFX_EXTBUFF_HVS_NOISE_REDUCTION       )
 #endif
 
 #if (MFX_VERSION >= 1026)
